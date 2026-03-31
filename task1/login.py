@@ -18,6 +18,7 @@ class LoginDialog(QDialog):
         self._users = users
         self._max_attempts = max_attempts
         self._attempts = 0
+        self._authenticated = False  # Plan B: avoid cancel on successful close
 
         self.setWindowTitle("🔐 Login")
         self.setFixedSize(380, 300)
@@ -95,18 +96,18 @@ class LoginDialog(QDialog):
             QPushButton#login_btn:hover    { background: #2ecc71; }
             QPushButton#login_btn:pressed  { background: #1e8449; }
             QPushButton#login_btn:disabled { background: #555555; }
-        """
+            """
         )
 
-    # ✅ _check_login 係獨立方法，唔係 _apply_style 入面
     def _check_login(self):
         username = self.entry_user.text().strip()
         password = self.entry_pass.text()
         user = self._users.get(username)
 
         if user and user["password"] == password:
+            self._authenticated = True
             self.login_success.emit(username, user["role"])
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self.accept)
             return
 
         self._attempts += 1
@@ -124,4 +125,14 @@ class LoginDialog(QDialog):
             self.login_btn.setDisabled(True)
             self.entry_user.setDisabled(True)
             self.entry_pass.setDisabled(True)
-            QTimer.singleShot(2000, self.login_cancelled.emit)
+
+            def _cancel_and_close():
+                self.login_cancelled.emit()
+                self.close()
+
+            QTimer.singleShot(2000, _cancel_and_close)
+
+    def reject(self):
+        if not self._authenticated:
+            self.login_cancelled.emit()
+        super().reject()

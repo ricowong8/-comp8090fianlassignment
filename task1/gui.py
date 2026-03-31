@@ -1,8 +1,5 @@
-import matplotlib
-
-matplotlib.use("QtAgg")
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -23,17 +20,15 @@ from PySide6.QtWidgets import (
     QFrame,
     QSizePolicy,
 )
-from PySide6.QtGui import QPalette, QColor, QFont
+from PySide6.QtGui import QPalette, QColor, QFont, QDoubleValidator, QIntValidator
 from PySide6.QtCore import Qt, Signal
 
-from models import Product, Inventory
+from models import Inventory
+from inventory_service import InventoryService
 
 
-# ──────────────────────────────────────────────
-# KPI 卡片
-# ──────────────────────────────────────────────
 class KpiCard(QFrame):
-    def __init__(self, title: str, value: str = "—", color: str = "#4a90d9"):
+    def __init__(self, title: str, value: str = "-", color: str = "#4a90d9"):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
         self.setFixedSize(180, 80)
@@ -44,7 +39,7 @@ class KpiCard(QFrame):
                 border: 1px solid {color};
                 border-radius: 8px;
             }}
-        """
+            """
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -66,17 +61,18 @@ class KpiCard(QFrame):
         self._value.setText(value)
 
 
-# ──────────────────────────────────────────────
-# 主視窗
-# ──────────────────────────────────────────────
 class InventoryApp(QMainWindow):
     logout_requested = Signal()
 
-    def __init__(self, username: str = None, role: str = "viewer"):
+    def __init__(self, username: str | None = None, role: str = "viewer"):
         super().__init__()
         self.inventory = Inventory()
+        self.service = InventoryService(self.inventory)
         self.role = role
-        self.chart_canvas = None
+
+        self.chart_canvas: FigureCanvas | None = None
+        self.chart_figure: Figure | None = None
+        self.chart_placeholder: QLabel | None = None
 
         self.setWindowTitle("📦 Inventory Management System")
         self.resize(1100, 750)
@@ -112,7 +108,7 @@ class InventoryApp(QMainWindow):
             """
             QTabBar::tab          { padding: 8px 20px; font-size: 13px; }
             QTabBar::tab:selected { background: #3a3a3a; color: #64b5f6; }
-        """
+            """
         )
         root.addWidget(self.tabs)
 
@@ -121,7 +117,6 @@ class InventoryApp(QMainWindow):
             self._build_product_tab()
         self._build_dashboard_tab()
 
-    # ── 深色主題 ──────────────────────────────
     def _apply_dark_theme(self):
         palette = QPalette()
         for role, color in {
@@ -138,7 +133,6 @@ class InventoryApp(QMainWindow):
             palette.setColor(role, color)
         self.setPalette(palette)
 
-    # ── Tab 1：歡迎頁 ─────────────────────────
     def _build_menu_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -158,19 +152,20 @@ class InventoryApp(QMainWindow):
         layout.addWidget(sub)
         self.tabs.addTab(tab, "🏠 Menu")
 
-    # ── Tab 2：產品管理（Admin Only）─────────
     def _build_product_tab(self):
         tab = QWidget()
         outer = QVBoxLayout(tab)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+
         content = QWidget()
         form = QFormLayout(content)
         form.setLabelAlignment(Qt.AlignRight)
         form.setSpacing(12)
         form.setContentsMargins(40, 20, 40, 20)
 
-        def _entry(placeholder=""):
+        def _entry(placeholder: str = "") -> QLineEdit:
             e = QLineEdit()
             e.setPlaceholderText(placeholder)
             e.setStyleSheet(
@@ -185,6 +180,9 @@ class InventoryApp(QMainWindow):
         self.entry_qty = _entry("e.g. 50")
         self.entry_cat = _entry("e.g. Fruit")
 
+        self.entry_price.setValidator(QDoubleValidator(0.0, 1_000_000_000.0, 2, self))
+        self.entry_qty.setValidator(QIntValidator(0, 1_000_000_000, self))
+
         for label, widget in [
             ("Item ID:", self.entry_id),
             ("Name:", self.entry_name),
@@ -195,31 +193,53 @@ class InventoryApp(QMainWindow):
             form.addRow(label, widget)
 
         btn_row = QHBoxLayout()
-        for text, color, slot in [
-            ("➕  Add", "#27ae60", self.add_product),
-            ("🗑  Remove", "#c0392b", self.remove_product),
-            ("✏️  Update", "#2980b9", self.update_product),
-            ("🧹  Clear", "#555555", self._clear_entries),
-        ]:
-            btn = QPushButton(text)
-            btn.setStyleSheet(
-                f"background:{color}; color:white; padding:8px 18px;"
-                "border-radius:5px; font-size:13px;"
-            )
-            btn.clicked.connect(slot)
-            btn_row.addWidget(btn)
+
+        self.btn_add = QPushButton("➕  Add")
+        self.btn_add.setStyleSheet(
+            "background:#27ae60; color:white; padding:8px 18px;"
+            "border-radius:5px; font-size:13px;"
+        )
+        self.btn_add.clicked.connect(self.add_product)
+        btn_row.addWidget(self.btn_add)
+
+        btn_remove = QPushButton("🗑  Remove")
+        btn_remove.setStyleSheet(
+            "background:#c0392b; color:white; padding:8px 18px;"
+            "border-radius:5px; font-size:13px;"
+        )
+        btn_remove.clicked.connect(self.remove_product)
+        btn_row.addWidget(btn_remove)
+
+        self.btn_update = QPushButton("✏️  Update")
+        self.btn_update.setStyleSheet(
+            "background:#2980b9; color:white; padding:8px 18px;"
+            "border-radius:5px; font-size:13px;"
+        )
+        self.btn_update.clicked.connect(self.update_product)
+        btn_row.addWidget(self.btn_update)
+
+        btn_clear = QPushButton("🧹  Clear")
+        btn_clear.setStyleSheet(
+            "background:#555555; color:white; padding:8px 18px;"
+            "border-radius:5px; font-size:13px;"
+        )
+        btn_clear.clicked.connect(self._clear_entries)
+        btn_row.addWidget(btn_clear)
 
         form.addRow(btn_row)
+
         scroll.setWidget(content)
         outer.addWidget(scroll)
+
+        self._bind_validation_signals()
+        self._validate_form()
+
         self.tabs.addTab(tab, "🛠 Product Info")
 
-    # ── Tab 3：儀表板 ─────────────────────────
     def _build_dashboard_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # 表格
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(["ID", "Name", "Price", "Qty", "Category"])
@@ -230,13 +250,12 @@ class InventoryApp(QMainWindow):
         self.table.setStyleSheet("font-size: 13px;")
         layout.addWidget(self.table, stretch=3)
 
-        # KPI 列
         kpi_row = QHBoxLayout()
         kpi_row.setAlignment(Qt.AlignCenter)
-        self.kpi_total_qty = KpiCard("Total Quantity", "—", "#64b5f6")
-        self.kpi_low_stock = KpiCard("Low Stock (<10)", "—", "#e74c3c")
-        self.kpi_avg_price = KpiCard("Avg Price", "—", "#2ecc71")
-        self.kpi_cat_count = KpiCard("Categories", "—", "#f39c12")
+        self.kpi_total_qty = KpiCard("Total Quantity", "-", "#64b5f6")
+        self.kpi_low_stock = KpiCard("Low Stock (<10)", "-", "#e74c3c")
+        self.kpi_avg_price = KpiCard("Avg Price", "-", "#2ecc71")
+        self.kpi_cat_count = KpiCard("Categories", "-", "#f39c12")
         for card in [
             self.kpi_total_qty,
             self.kpi_low_stock,
@@ -246,14 +265,12 @@ class InventoryApp(QMainWindow):
             kpi_row.addWidget(card)
         layout.addLayout(kpi_row)
 
-        # 圖表區
         self.chart_frame = QWidget()
         self.chart_frame.setMinimumHeight(280)
         self.chart_frame.setLayout(QVBoxLayout())
         self.chart_frame.layout().setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.chart_frame, stretch=2)
 
-        # 按鈕列
         btn_row = QHBoxLayout()
         for text, color, slot in [
             ("📋  List Products", "#2980b9", self.list_products),
@@ -270,9 +287,29 @@ class InventoryApp(QMainWindow):
 
         self.tabs.addTab(tab, "📊 Data Dashboard")
 
-    # ──────────────────────────────────────────
-    # 功能方法
-    # ──────────────────────────────────────────
+    def _bind_validation_signals(self):
+        for e in [
+            self.entry_id,
+            self.entry_name,
+            self.entry_price,
+            self.entry_qty,
+            self.entry_cat,
+        ]:
+            e.textChanged.connect(self._validate_form)
+
+    def _validate_form(self):
+        item_id = self.entry_id.text().strip()
+        name = self.entry_name.text().strip()
+        price = self.entry_price.text().strip()
+        qty = self.entry_qty.text().strip()
+        cat = self.entry_cat.text().strip()
+
+        add_valid = all([item_id, name, price, qty, cat])
+        update_valid = bool(item_id and (price or qty))
+
+        self.btn_add.setEnabled(add_valid)
+        self.btn_update.setEnabled(update_valid)
+
     def _clear_entries(self):
         for e in [
             self.entry_id,
@@ -282,106 +319,108 @@ class InventoryApp(QMainWindow):
             self.entry_cat,
         ]:
             e.clear()
+        self._validate_form()
 
     def _status(self, msg: str, ms: int = 3000):
         self.status_bar.showMessage(msg, ms)
 
+    def _refresh_product_views(self):
+        self.list_products()
+        self.update_dashboard()
+
     def add_product(self):
-        try:
-            p = Product(
-                self.entry_id.text().strip(),
-                self.entry_name.text().strip(),
-                float(self.entry_price.text()),
-                int(self.entry_qty.text()),
-                self.entry_cat.text().strip(),
-            )
-            if self.inventory.add_product(p):
-                self._status(f"✅ '{p.name}' added.")
-                self._clear_entries()
-                self.list_products()
-                self.update_dashboard()
-            else:
-                QMessageBox.warning(
-                    self, "Duplicate ID", f"Product ID '{p.item_id}' already exists."
-                )
-        except ValueError:
-            QMessageBox.critical(
-                self,
-                "Input Error",
-                "Price must be a number, Quantity must be an integer.",
-            )
+        result = self.service.add_product(
+            self.entry_id.text(),
+            self.entry_name.text(),
+            self.entry_price.text(),
+            self.entry_qty.text(),
+            self.entry_cat.text(),
+        )
+        if result.ok:
+            self._status(f"✅ {result.message}")
+            self._clear_entries()
+            self._refresh_product_views()
+        else:
+            QMessageBox.warning(self, "Cannot Add Product", result.message)
 
     def remove_product(self):
         item_id = self.entry_id.text().strip()
         if not item_id:
             QMessageBox.warning(self, "Missing ID", "Please enter an Item ID.")
             return
+
         confirm = QMessageBox.question(
             self,
             "Confirm Remove",
             f"Remove product '{item_id}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
-        if confirm == QMessageBox.Yes:
-            if self.inventory.remove_product(item_id):
-                self._status(f"🗑 '{item_id}' removed.")
-                self._clear_entries()
-                self.list_products()
-                self.update_dashboard()
-            else:
-                QMessageBox.critical(
-                    self, "Not Found", f"Product '{item_id}' does not exist."
-                )
+        if confirm != QMessageBox.Yes:
+            return
+
+        result = self.service.remove_product(item_id)
+        if result.ok:
+            self._status(f"🗑 {result.message}")
+            self._clear_entries()
+            self._refresh_product_views()
+        else:
+            QMessageBox.critical(self, "Cannot Remove Product", result.message)
 
     def update_product(self):
-        try:
-            item_id = self.entry_id.text().strip()
-            new_price = (
-                float(self.entry_price.text())
-                if self.entry_price.text().strip()
-                else None
-            )
-            new_qty = (
-                int(self.entry_qty.text()) if self.entry_qty.text().strip() else None
-            )
-            if self.inventory.update_product(item_id, new_price, new_qty):
-                self._status(f"✏️ '{item_id}' updated.")
-                self.list_products()
-                self.update_dashboard()
-            else:
-                QMessageBox.critical(
-                    self, "Not Found", f"Product '{item_id}' does not exist."
-                )
-        except ValueError:
-            QMessageBox.critical(self, "Input Error", "Invalid numeric value.")
+        result = self.service.update_product(
+            self.entry_id.text(),
+            self.entry_price.text(),
+            self.entry_qty.text(),
+        )
+        if result.ok:
+            self._status(f"✏️ {result.message}")
+            self._refresh_product_views()
+        else:
+            QMessageBox.warning(self, "Cannot Update Product", result.message)
 
     def list_products(self):
         self.table.setSortingEnabled(False)
-        self.table.setRowCount(0)
-        for p in self.inventory.products.values():
-            row = self.table.rowCount()
-            self.table.insertRow(row)
+        products = list(self.inventory.products.values())
+        self.table.setRowCount(len(products))
+
+        for row, p in enumerate(products):
             self.table.setItem(row, 0, QTableWidgetItem(p.item_id))
             self.table.setItem(row, 1, QTableWidgetItem(p.name))
+
             price_item = QTableWidgetItem()
             price_item.setData(Qt.DisplayRole, p.price)
             self.table.setItem(row, 2, price_item)
+
             qty_item = QTableWidgetItem()
             qty_item.setData(Qt.DisplayRole, p.get_quantity())
             self.table.setItem(row, 3, qty_item)
+
             self.table.setItem(row, 4, QTableWidgetItem(p.category))
+
         self.table.setSortingEnabled(True)
 
+    def _clear_chart_widgets(self):
+        layout = self.chart_frame.layout()
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+        self.chart_canvas = None
+        self.chart_figure = None
+        self.chart_placeholder = None
+
     def update_dashboard(self):
-        # 刷新圖表
-        if self.chart_canvas:
-            self.chart_canvas.setParent(None)
-            plt.close("all")
-            self.chart_canvas = None
+        self._clear_chart_widgets()
 
         summary = self.inventory.category_summary()
         if summary:
-            fig, ax = plt.subplots(figsize=(5, 3.5), facecolor="#1c1c1c")
+            fig = Figure(figsize=(5, 3.5), facecolor="#1c1c1c")
+            self.chart_figure = fig
+
+            ax = fig.add_subplot(111)
             ax.set_facecolor("#1c1c1c")
             ax.pie(
                 summary.values(),
@@ -392,13 +431,18 @@ class InventoryApp(QMainWindow):
             )
             ax.set_title("Inventory by Category", color="#64b5f6", fontsize=13, pad=10)
             fig.tight_layout()
+
             self.chart_canvas = FigureCanvas(fig)
             self.chart_canvas.setSizePolicy(
                 QSizePolicy.Expanding, QSizePolicy.Expanding
             )
             self.chart_frame.layout().addWidget(self.chart_canvas)
+        else:
+            self.chart_placeholder = QLabel("No data yet. Add products to view chart.")
+            self.chart_placeholder.setAlignment(Qt.AlignCenter)
+            self.chart_placeholder.setStyleSheet("color:#888; font-size:12px;")
+            self.chart_frame.layout().addWidget(self.chart_placeholder)
 
-        # 刷新 KPI
         self.kpi_total_qty.update_value(str(self.inventory.total_quantity()))
         self.kpi_low_stock.update_value(str(self.inventory.low_stock_count()))
         self.kpi_avg_price.update_value(f"${self.inventory.avg_price():.2f}")

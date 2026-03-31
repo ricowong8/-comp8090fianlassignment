@@ -1,9 +1,15 @@
 import sys
+import matplotlib
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
 from login import LoginDialog
+
+# Set backend in entrypoint to avoid import-time side effects in GUI modules.
+matplotlib.use("QtAgg")
 from gui import InventoryApp
+
 
 USERS: dict[str, dict] = {
     "admin": {"password": "1234", "role": "admin"},
@@ -25,8 +31,7 @@ class AppController:
         self.login_dialog.show()
 
     def _on_login_success(self, username: str, role: str):
-        self.login_dialog = None  # ✅ dialog 已自行 close()，只需釋放參考
-
+        self.login_dialog = None
         self.main_window = InventoryApp(username=username, role=role)
         self.main_window.logout_requested.connect(self._on_logout)
         self.main_window.show()
@@ -41,6 +46,6 @@ class AppController:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    app.setQuitOnLastWindowClosed(False)  # ✅ 視窗切換時唔會自動退出
-    controller = AppController()
+    app.setQuitOnLastWindowClosed(False)
+    _ = AppController()
     sys.exit(app.exec())
