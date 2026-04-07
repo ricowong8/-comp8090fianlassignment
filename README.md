@@ -161,8 +161,8 @@ python heapsort_example.py
 
 | Field | Detail |
 |---|---|
-| Name | *(Your Name)* |
-| Student ID | *(Your SID)* |
+| Name | WONG CHEUK YU|
+| Student ID | 14154269 |
 | Programme | MSc in Computing (MCOMP) |
 | Institution | Hong Kong Metropolitan University |
 
