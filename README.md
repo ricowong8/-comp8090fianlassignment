@@ -152,8 +152,8 @@ python heapsort_example.py
 ---
 
 ## 🎬 5-Minute Introduction Video
-
-[Insert video link here]
+TASK 1(https://youtu.be/JmXXDZIyXYw)
+TASK 2(https://youtu.be/DDd4jfk-Dyg)
 
 ---
 
