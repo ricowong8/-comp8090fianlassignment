@@ -25,7 +25,7 @@ comp8090-project/
 
 ---
 
-## ✅ Task 1 — Inventory Management System
+##  Task 1 — Inventory Management System
 
 ### Description
 
@@ -36,11 +36,11 @@ and Qt Signals/Slots.
 
 ### Features
 
-- 🔐 **Role-based login** — Admin (full access) and Viewer (read-only); locks after 3 failed attempts
-- 📦 **Product management** — Add, edit, remove products with real-time input validation
-- 📊 **Dashboard** — Live KPI cards (total items, low-stock alerts, total value) + category pie chart
-- 🔍 **Search & sort** — Filter by name/category; sort by any column
-- 🎨 **GUI** — PySide6 QMainWindow with tab navigation, styled KPI cards, and Matplotlib charts
+-  **Role-based login** — Admin (full access) and Viewer (read-only); locks after 3 failed attempts
+-  **Product management** — Add, edit, and remove products with real-time input validation
+-  **Dashboard** — Live KPI cards (total items, low-stock alerts, total value) + category pie chart
+-  **Search & sort** — Filter by name/category; sort by any column
+-  **GUI** — PySide6 QMainWindow with tab navigation, styled KPI cards, and Matplotlib charts
 
 ### OOP Concepts Used
 
@@ -93,7 +93,7 @@ python app.py
 
 ---
 
-## ✅ Task 2 — Self-Study: Max-Heap & Heap Sort
+##  Task 2 — Self-Study: Max-Heap & Heap Sort
 
 ### Description
 
@@ -157,7 +157,7 @@ TASK 2(https://youtu.be/DDd4jfk-Dyg)
 
 ---
 
-## 👤 Author
+##  Author
 
 | Field | Detail |
 |---|---|
@@ -168,7 +168,7 @@ TASK 2(https://youtu.be/DDd4jfk-Dyg)
 
 ---
 
-## 📚 References
+##  References
 
 1. Cormen, T. H., Leiserson, C. E., Rivest, R. L., & Stein, C. (2009). *Introduction to Algorithms* (3rd ed.). MIT Press.
 2. Python Software Foundation. (2024). *heapq — Heap queue algorithm*. https://docs.python.org/3/library/heapq.html
